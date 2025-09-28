@@ -21,7 +21,12 @@ import {
   Users,
   AlertTriangle,
   CheckCircle,
-  Clock
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Calendar,
+  Building,
+  Star
 } from 'lucide-react';
 
 interface User {
@@ -67,6 +72,117 @@ interface PopulationAnalysis {
   common_conditions: { [key: string]: any };
   timestamp: string;
 }
+
+// Compact Article Card with Dropdown
+const ArticleCard: React.FC<{ result: SearchResult; index: number }> = ({ result, index }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const getRelevanceColor = (score: number) => {
+    if (score > 0.8) return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    if (score > 0.6) return 'bg-amber-100 text-amber-800 border-amber-200';
+    return 'bg-gray-100 text-gray-700 border-gray-200';
+  };
+
+  const getRelevanceIcon = (score: number) => {
+    if (score > 0.8) return <Star className="w-3 h-3 fill-current" />;
+    return null;
+  };
+
+  return (
+    <div className={`bg-white border rounded-lg transition-all duration-200 hover:shadow-md ${
+      isExpanded ? 'shadow-md border-indigo-200' : 'border-gray-200'
+    }`}>
+      {/* Compact Header - Always Visible */}
+      <div 
+        className="p-4 cursor-pointer hover:bg-gray-50 transition-colors duration-150"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0 pr-4">
+            {/* Title */}
+            <h4 className="text-sm font-semibold text-gray-900 mb-2 leading-tight">
+              {result.title}
+            </h4>
+            
+            {/* Compact Meta Information */}
+            <div className="flex items-center flex-wrap gap-3 text-xs text-gray-600">
+              <div className="flex items-center gap-1">
+                <Building className="w-3 h-3 text-gray-400" />
+                <span className="font-medium">{result.journal}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-gray-400" />
+                <span>{result.publication_date}</span>
+              </div>
+              <span className="text-indigo-600 font-medium">{result.source}</span>
+            </div>
+          </div>
+          
+          {/* Right Side: Relevance Score + Expand Icon */}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-full border text-xs font-medium ${
+              getRelevanceColor(result.relevance_score)
+            }`}>
+              {getRelevanceIcon(result.relevance_score)}
+              <span>{Math.round(result.relevance_score * 100)}%</span>
+            </div>
+            
+            <div className="text-gray-400">
+              {isExpanded ? (
+                <ChevronUp className="w-5 h-5" />
+              ) : (
+                <ChevronDown className="w-5 h-5" />
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Expanded Content */}
+      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
+        isExpanded ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0'
+      }`}>
+        <div className="px-4 pb-4 border-t border-gray-100 bg-gray-50">
+          <div className="pt-4 space-y-4">
+            {/* Abstract */}
+            <div>
+              <h5 className="text-sm font-medium text-gray-900 mb-2">Abstract</h5>
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {result.abstract}
+              </p>
+            </div>
+
+            {/* Authors (if available) */}
+            {result.authors && result.authors.length > 0 && (
+              <div>
+                <h5 className="text-sm font-medium text-gray-900 mb-2">Authors</h5>
+                <p className="text-sm text-gray-600">
+                  {result.authors.slice(0, 3).join(', ')}
+                  {result.authors.length > 3 && ` +${result.authors.length - 3} more`}
+                </p>
+              </div>
+            )}
+
+            {/* Action Button */}
+            {result.url && (
+              <div className="pt-2">
+                <a
+                  href={result.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors duration-150"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  View Full Article
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function DashboardPage() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -541,42 +657,26 @@ export default function DashboardPage() {
 
         {/* Search Results */}
         {searchResults.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border p-8">
+          <div className="bg-white rounded-2xl shadow-sm border p-6">
             <div className="mb-6">
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                Search Results
-              </h3>
-              <p className="text-gray-600">
-                Found {searchResults.length} results
-              </p>
-            </div>
-            <div className="space-y-6">
-              {searchResults.map((result, index) => (
-                <div key={index} className="border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-3">
-                    {result.title}
-                  </h4>
-                  <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-3">
-                    <span><strong>Journal:</strong> {result.journal}</span>
-                    <span><strong>Date:</strong> {result.publication_date}</span>
-                    <span><strong>Source:</strong> {result.source}</span>
-                    <span><strong>Relevance:</strong> {Math.round(result.relevance_score * 100)}%</span>
-                  </div>
-                  <p className="text-gray-700 mb-4 leading-relaxed">
-                    {result.abstract}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-1">
+                    Literature Results
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Found {searchResults.length} peer-reviewed articles • Click to expand details
                   </p>
-                  {result.url && (
-                    <a
-                      href={result.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-medium"
-                    >
-                      View Full Article
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                  )}
                 </div>
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <BookOpen className="w-4 h-4" />
+                  <span>Searchable</span>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {searchResults.map((result, index) => (
+                <ArticleCard key={index} result={result} index={index} />
               ))}
             </div>
           </div>
@@ -628,7 +728,7 @@ export default function DashboardPage() {
                     </div>
                     
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Confidence</span>
+                      <span className="text-sm text-gray-600">Relevance</span>
                       <span className="text-sm text-gray-900">
                         {Math.round((riskAssessment.confidence || 0) * 100)}%
                       </span>
@@ -787,33 +887,6 @@ export default function DashboardPage() {
                 </div>
                 <div className="text-xs text-gray-500">Average age</div>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Welcome Message */}
-        {searchResults.length === 0 && !isLoading && (
-          <div className="bg-white rounded-2xl shadow-sm border p-8 text-center">
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Welcome to AI-Powered Medical Search
-            </h3>
-            <p className="text-gray-600 mb-6">
-              Start typing in the search box above to get intelligent suggestions and find relevant medical information.
-            </p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
-              {quickActions.map((action, index) => (
-                <button
-                  key={index}
-                  onClick={() => {
-                    setSearchQuery(action.query);
-                    handleSearch(action.query);
-                  }}
-                  className="flex items-center gap-3 p-4 bg-gray-50 hover:bg-indigo-50 border border-gray-200 hover:border-indigo-300 rounded-xl transition-colors"
-                >
-                  <action.icon className="w-5 h-5 text-indigo-600" />
-                  <span className="text-sm font-medium text-gray-700">{action.label}</span>
-                </button>
-              ))}
             </div>
           </div>
         )}
