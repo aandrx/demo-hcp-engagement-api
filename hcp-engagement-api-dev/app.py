@@ -1154,8 +1154,12 @@ class AIAnalysis(Resource):
         Provide a concise, well-structured analysis.
         """
         
+        logger.info(f"AI Analysis Request - Text length: {len(text)}, Analysis type: {analysis_type}, Context: {data.get('context', 'General analysis')}")
+        logger.info(f"AI Analysis Prompt: {prompt[:200]}...")
+        
         try:
             analysis_result = ai_service._call_groq_api(prompt, model)
+            logger.info(f"Groq API Response: {analysis_result[:200] if analysis_result else 'None'}...")
             
             response = {
                 'status': 'success',

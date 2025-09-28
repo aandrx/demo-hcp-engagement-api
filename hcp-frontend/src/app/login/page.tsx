@@ -44,34 +44,34 @@ export default function LoginPage() {
       }
     } catch (error) {
       console.group('🚨 LOGIN ERROR - API DEBUG INFO');
-      console.error('❌ Error Type:', error.constructor.name);
-      console.error('❌ Error Name:', error.name);
-      console.error('❌ Error Message:', error.message);
-      console.error('❌ Full Error Object:', error);
-      console.error('❌ Stack Trace:', error.stack);
-      console.error('❌ Request URL:', '/api/proxy/auth/login');
-      console.error('❌ Request Method:', 'POST');
-      console.error('❌ Request Headers:', {
+      console.error('Error Type:', error.constructor.name);
+      console.error('Error Name:', error.name);
+      console.error('Error Message:', error.message);
+      console.error('Full Error Object:', error);
+      console.error('Stack Trace:', error.stack);
+      console.error('Request URL:', '/api/proxy/auth/login');
+      console.error('Request Method:', 'POST');
+      console.error('Request Headers:', {
         'Content-Type': 'application/json',
         'Origin': window.location.origin
       });
-      console.error('❌ Request Body:', { username, password: '***' });
-      console.error('❌ Current URL:', window.location.href);
-      console.error('❌ User Agent:', navigator.userAgent);
-      console.error('❌ Timestamp:', new Date().toISOString());
+      console.error('Request Body:', { username, password: '***' });
+      console.error('Current URL:', window.location.href);
+      console.error('User Agent:', navigator.userAgent);
+      console.error('Timestamp:', new Date().toISOString());
       
          // Check if API is reachable
          fetch('/api/proxy/health')
         .then(response => {
-          console.log('✅ API Health Check Response:', response.status, response.statusText);
+          console.log('API Health Check Response:', response.status, response.statusText);
           return response.json();
         })
         .then(data => {
-          console.log('✅ API Health Data:', data);
+          console.log('API Health Data:', data);
         })
         .catch(healthError => {
-          console.error('❌ API Health Check Failed:', healthError);
-          console.error('❌ This means the API is not running or not accessible');
+          console.error('API Health Check Failed:', healthError);
+          console.error('This means the API is not running or not accessible');
         });
       
       console.groupEnd();

@@ -8,7 +8,7 @@ import json
 def test_api():
     base_url = "http://localhost:5000"
     
-    print("🔍 Testing Flask API CORS Configuration")
+    print("Testing Flask API CORS Configuration")
     print(f"Base URL: {base_url}")
     print("-" * 50)
     
@@ -21,7 +21,7 @@ def test_api():
         print(f"   CORS Headers: {dict(response.headers)}")
         print()
     except Exception as e:
-        print(f"   ❌ Health check failed: {e}")
+        print(f"   Health check failed: {e}")
         print()
     
     # Test login endpoint with OPTIONS (preflight)
@@ -40,7 +40,7 @@ def test_api():
                 print(f"     {header}: {value}")
         print()
     except Exception as e:
-        print(f"   ❌ OPTIONS request failed: {e}")
+        print(f"   OPTIONS request failed: {e}")
         print()
     
     # Test actual login
@@ -60,7 +60,7 @@ def test_api():
                 print(f"     {header}: {value}")
         print()
     except Exception as e:
-        print(f"   ❌ Login request failed: {e}")
+        print(f"   Login request failed: {e}")
         print()
 
 if __name__ == "__main__":

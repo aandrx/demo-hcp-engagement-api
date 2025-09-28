@@ -94,6 +94,8 @@ export default function DashboardPage() {
   const [isClient, setIsClient] = useState(false);
   const [expandedArticles, setExpandedArticles] = useState<Set<number>>(new Set());
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [literatureAiSummary, setLiteratureAiSummary] = useState<string | null>(null);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState<boolean>(false);
   
   const router = useRouter();
 
@@ -123,6 +125,10 @@ export default function DashboardPage() {
     setCurrentUser(JSON.parse(user));
   }, [router]);
 
+  useEffect(() => {
+    console.log('aiSummary state changed:', aiSummary);
+  }, [aiSummary]);
+
   const handleLogout = () => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('currentUser');
@@ -146,7 +152,7 @@ export default function DashboardPage() {
 
   const checkAPIHealth = async () => {
     try {
-      console.log('🔍 Checking API health at /api/proxy/health');
+      console.log('Checking API health at /api/proxy/health');
       const response = await fetch('/api/proxy/health');
       const data = await response.json();
       console.log('🏥 API Health Check Response:', data);
@@ -154,10 +160,10 @@ export default function DashboardPage() {
       console.log('🏥 Response Headers:', Object.fromEntries(response.headers.entries()));
       return response.ok;
     } catch (error) {
-      console.error('❌ API Health Check Failed:');
-      console.error('❌ Error type:', error.constructor.name);
-      console.error('❌ Error message:', error.message);
-      console.error('❌ Full error:', error);
+      console.error('API Health Check Failed:');
+      console.error('Error type:', error.constructor.name);
+      console.error('Error message:', error.message);
+      console.error('Full error:', error);
       return false;
     }
   };
@@ -168,6 +174,8 @@ export default function DashboardPage() {
 
     setIsLoading(true);
     setShowSuggestions(false);
+    setAiSummary(null); // Clear previous AI summary
+    setLiteratureAiSummary(null); // Clear previous literature AI summary
     
     // Add to search tags
     if (!searchTags.includes(searchTerm)) {
@@ -178,14 +186,14 @@ export default function DashboardPage() {
       // Check API health first
       const isAPIHealthy = await checkAPIHealth();
       if (!isAPIHealthy) {
-        console.error('❌ API is not responding. Please check if the backend is running on port 5000');
+        console.error('API is not responding. Please check if the backend is running on port 5000');
         return;
       }
 
       const keywords = searchTerm.split(' ').filter((word: string) => word.length > 2);
       const conditions = extractMedicalConditions(searchTerm);
 
-      console.log('🔍 Search parameters:', { searchTerm, keywords, conditions, filters });
+      console.log('Search parameters:', { searchTerm, keywords, conditions, filters });
 
       // Check authentication
       const authToken = localStorage.getItem('authToken');
@@ -213,23 +221,28 @@ export default function DashboardPage() {
 
       if (literatureResponse.ok) {
         const literatureData = await literatureResponse.json();
-        console.log('📚 Literature Search API Response:', literatureData);
+        console.log('Literature Search API Response:', literatureData);
         
         // Specifically log AI analysis
         if (literatureData.data && literatureData.data.ai_analysis) {
-          console.log('🤖 AI ANALYSIS FOUND:', literatureData.data.ai_analysis);
-          console.log('🧠 AI Analysis Summary:', literatureData.data.ai_analysis.summary);
-          console.log('🔍 Key Findings:', literatureData.data.ai_analysis.key_findings);
-          console.log('⚕️ Clinical Implications:', literatureData.data.ai_analysis.clinical_implications);
-          console.log('📊 Confidence Score:', literatureData.data.ai_analysis.confidence_score);
+          console.log('AI ANALYSIS FOUND:', literatureData.data.ai_analysis);
+          console.log('AI Analysis Summary:', literatureData.data.ai_analysis.summary);
+          console.log('Key Findings:', literatureData.data.ai_analysis.key_findings);
+          console.log('Clinical Implications:', literatureData.data.ai_analysis.clinical_implications);
+          console.log('Confidence Score:', literatureData.data.ai_analysis.confidence_score);
+
+          // USE BACKEND AI SUMMARY DIRECTLY
+          if (literatureData.data.ai_analysis.summary) {
+            setLiteratureAiSummary(literatureData.data.ai_analysis.summary);
+          }
         } else {
-          console.log('❌ NO AI ANALYSIS in response');
-          console.log('📋 Available data keys:', Object.keys(literatureData.data || {}));
+          console.log('NO AI ANALYSIS in response');
+          console.log('Available data keys:', Object.keys(literatureData.data || {}));
         }
         
         setSearchResults(literatureData.data?.studies || literatureData.studies || []);
       } else {
-        console.error('❌ Literature Search API Error:', await literatureResponse.text());
+        console.error('Literature Search API Error:', await literatureResponse.text());
         setSearchResults([]);
       }
 
@@ -245,8 +258,8 @@ export default function DashboardPage() {
 
   const fetchAnalyticsData = async (query: string, conditions: string[]) => {
     try {
-      console.log('🔍 Fetching analytics data for query:', query);
-      console.log('🔍 Extracted conditions:', conditions);
+      console.log('Fetching analytics data for query:', query);
+      console.log('Extracted conditions:', conditions);
 
       // Risk Assessment
       const riskResponse = await fetch('/api/proxy/analytics/predict-risk', {
@@ -271,10 +284,10 @@ export default function DashboardPage() {
 
       if (riskResponse.ok) {
         const riskData = await riskResponse.json();
-        console.log('⚠️ Risk Assessment API Response:', riskData);
+        console.log('Risk Assessment API Response:', riskData);
         setRiskAssessment(riskData);
       } else {
-        console.error('❌ Risk Assessment API Error:', await riskResponse.text());
+        console.error('Risk Assessment API Error:', await riskResponse.text());
       }
 
       // Cost Analysis
@@ -296,10 +309,10 @@ export default function DashboardPage() {
 
       if (costResponse.ok) {
         const costData = await costResponse.json();
-        console.log('💰 Cost Analysis API Response:', costData);
+        console.log('Cost Analysis API Response:', costData);
         setCostAnalysis(costData);
       } else {
-        console.error('❌ Cost Analysis API Error:', await costResponse.text());
+        console.error('Cost Analysis API Error:', await costResponse.text());
       }
 
       // Population Analysis
@@ -321,18 +334,20 @@ export default function DashboardPage() {
 
       if (populationResponse.ok) {
         const populationData = await populationResponse.json();
-        console.log('👥 Population Analysis API Response:', populationData);
+        console.log('Population Analysis API Response:', populationData);
         setPopulationAnalysis(populationData);
       } else {
-        console.error('❌ Population Analysis API Error:', await populationResponse.text());
+        console.error('Population Analysis API Error:', await populationResponse.text());
       }
 
       setShowAnalytics(true);
       
-      // Generate AI summary after analytics are loaded
-      setTimeout(() => {
-        generateAISummary();
-      }, 1000);
+      // Only generate AI summary via /ai/analyze if none was provided by literature endpoint
+      if (!literatureAiSummary) {
+        setTimeout(() => {
+          generateAISummary();
+        }, 300);
+      }
     } catch (error) {
       console.error('Analytics error:', error);
     }
@@ -362,26 +377,69 @@ export default function DashboardPage() {
 
   const generateAISummary = async () => {
     try {
-      const response = await fetch('/api/proxy/ai/summary', {
+      setIsGeneratingSummary(true);
+      // Build a compact text from current data for analysis
+      const lines: string[] = [];
+      if (searchResults && searchResults.length > 0) {
+        lines.push(`Top ${Math.min(searchResults.length, 5)} studies:`);
+        searchResults.slice(0, 5).forEach((s: any, i: number) => {
+          lines.push(`${i + 1}. ${s.title} (${s.journal}, ${s.publication_date})\nAbstract: ${s.abstract}`);
+        });
+      }
+      if (riskAssessment) {
+        lines.push(`Risk Assessment → Level: ${riskAssessment.risk_level}, Score: ${riskAssessment.risk_score}, Factors: ${(riskAssessment.risk_factors || []).join(', ')}`);
+      }
+      if (costAnalysis) {
+        lines.push(`Cost Analysis → Estimated cost: $${costAnalysis.estimated_cost}, Efficiency: ${costAnalysis.cost_efficiency}`);
+      }
+      if (populationAnalysis) {
+        const regions = populationAnalysis.risk_distribution ? Object.keys(populationAnalysis.risk_distribution) : [];
+        lines.push(`Population → Risk distribution regions: ${regions.join(', ')}`);
+      }
+
+      const payload = {
+        text: lines.join('\n\n'),
+        analysis_type: 'summary',
+        model: 'llama-3.1-8b-instant',
+        context: 'AI summary for HCP dashboard combining literature search and analytics'
+      };
+      
+      console.log('AI Summary Request Payload:', payload);
+      
+      const response = await fetch('/api/proxy/ai/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         },
-        body: JSON.stringify({
-          search_results: searchResults,
-          risk_assessment: riskAssessment,
-          cost_analysis: costAnalysis,
-          population_analysis: populationAnalysis
-        })
+        body: JSON.stringify(payload)
       });
       
       if (response.ok) {
         const data = await response.json();
-        setAiSummary(data.summary);
+        console.log('AI Summary Response:', data);
+        console.log('Response structure:', {
+          hasData: !!data.data,
+          hasAnalysis: !!data.data?.analysis,
+          hasSummary: !!data.summary,
+          dataKeys: Object.keys(data),
+          dataDataKeys: data.data ? Object.keys(data.data) : 'no data'
+        });
+        // Get the raw Groq API response from data.analysis
+        const groqResponse = data?.data?.analysis || '';
+        console.log('Raw Groq API Response:', groqResponse);
+        console.log('Groq Response length:', groqResponse.length);
+        console.log('Setting aiSummary to raw Groq response');
+        setAiSummary(groqResponse);
+      } else {
+        const errText = await response.text();
+        console.error('AI Summary HTTP Error:', response.status, errText);
+        setAiSummary(null);
       }
     } catch (error) {
       console.error('AI Summary error:', error);
+    } finally {
+      setIsGeneratingSummary(false);
     }
   };
 
@@ -495,6 +553,29 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Auto AI Summary (below search bar)
+          <div className="mb-6">
+            <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-4 border border-purple-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <Brain className="w-4 h-4 text-purple-600" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">AI Summary</div>
+                    <div className="text-xs text-gray-600">Generated automatically from results and analytics</div>
+                  </div>
+                </div>
+                {isGeneratingSummary && (
+                  <div className="flex items-center gap-2 text-xs text-purple-700">
+                    <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                    Generating...
+                  </div>
+                )}
+              </div>
+            </div>
+          </div> */}
+
           {/* Filters */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div>
@@ -583,6 +664,26 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
+
+        {/* AI Summary Box */}
+        {(literatureAiSummary || aiSummary) && (
+          <div className="bg-white rounded-2xl shadow-sm border p-8 mb-8">
+            <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-4 border border-purple-200">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <Brain className="w-4 h-4 text-purple-600" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">AI Summary</div>
+                  <div className="text-xs text-gray-600">Generated from search results and analytics</div>
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-purple-200">
+                <p className="text-gray-700 text-sm leading-relaxed">{literatureAiSummary || aiSummary}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Search Results */}
         {searchResults.length > 0 && (
@@ -860,33 +961,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* AI Summary Section */}
-            <div className="mt-8 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-6 border border-purple-200">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <Brain className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <h4 className="text-lg font-semibold text-gray-900">AI Summary</h4>
-                </div>
-                <button
-                  onClick={generateAISummary}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
-                >
-                  Generate Summary
-                </button>
-              </div>
-              
-              {aiSummary ? (
-                <div className="bg-white rounded-lg p-4 border border-purple-200">
-                  <p className="text-gray-700 leading-relaxed">{aiSummary}</p>
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg p-4 border border-purple-200 text-center">
-                  <p className="text-gray-500 italic">Click "Generate Summary" to get an AI-powered analysis of your search results and analytics data.</p>
-                </div>
-              )}
-            </div>
+            {/* AI Summary Section moved above results */}
           </div>
         )}
 
