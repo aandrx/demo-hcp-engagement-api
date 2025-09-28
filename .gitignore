@@ -85,3 +85,12 @@ jspm_packages/
 
 # TernJS port file
 .tern-port
+
+# macOS system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
