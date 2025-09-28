@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_restx import Api, Resource, fields
-from flask_cors import CORS
-from flask_socketio import SocketIO, emit 
+from flask_socketio import SocketIO, emit
+# from flask_cors import CORS 
 import jwt
 import bcrypt
 from passlib.context import CryptContext
@@ -40,13 +40,49 @@ if groq_api_key:
 else:
     print("WARNING: No Groq API key found in environment variables")
 
-# Enhanced CORS configuration for development
-CORS(app, 
-    origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://localhost:5002"],
-    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Origin", "Accept"],
-    supports_credentials=False
-)
+# cors configuration
+
+# # Enhanced CORS configuration for open-source frontend compatibility
+# allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173').split(',')
+
+# CORS(app, 
+#     resources={
+#         r"/*": {
+#             "origins": allowed_origins,
+#             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+#             "allow_headers": ["Authorization", "Content-Type", "X-Requested-With"],
+#             "supports_credentials": False,
+#             "expose_headers": ["Content-Type", "Authorization"],
+#             "max_age": 600  # Cache preflight requests for 10 minutes
+#         }
+#     }
+# )
+
+# # Add global OPTIONS handler for preflight requests
+# @app.before_request
+# def handle_preflight():
+#     if request.method == "OPTIONS":
+#         response = jsonify({"status": "preflight"})
+#         response.headers.add("Access-Control-Allow-Origin", request.headers.get('Origin', '*'))
+#         response.headers.add("Access-Control-Allow-Headers", "Authorization, Content-Type")
+#         response.headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+#         return response
+
+# # Add after_request handler for CORS headers
+# @app.after_request
+# def after_request(response):
+#     origin = request.headers.get('Origin')
+#     if origin and origin in allowed_origins:
+#         response.headers.add('Access-Control-Allow-Origin', origin)
+#     else:
+#         # For development, allow the request origin if no specific origins match
+#         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', allowed_origins[0] if allowed_origins else '*'))
+    
+#     response.headers.add('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+#     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+#     response.headers.add('Access-Control-Allow-Credentials', 'false')
+#     response.headers.add('Access-Control-Max-Age', '600')
+#     return response
 
 # Setup logging (open-source friendly)
 if not os.path.exists('logs'):
