@@ -43,7 +43,7 @@ else:
 # Security-focused CORS
 CORS(app, resources={
     r"/*": {
-        "origins": os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000').split(','),
+        "origins": os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3002,http://127.0.0.1:3002').split(','),
         "methods": ["GET", "POST", "PUT", "DELETE"],
         "allow_headers": ["Authorization", "Content-Type"]
     }
