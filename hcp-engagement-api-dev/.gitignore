@@ -209,7 +209,7 @@ cython_debug/
 .cursorignore
 
 # ========================================
-# 🔒 SECURITY - SENSITIVE DATA PROTECTION
+# SECURITY - SENSITIVE DATA PROTECTION
 # ========================================
 
 # API Keys and Secrets
@@ -291,3 +291,7 @@ Thumbs.db
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# logs
+.logs
+logs/

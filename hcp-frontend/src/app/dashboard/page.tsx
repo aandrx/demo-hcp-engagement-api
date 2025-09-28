@@ -141,8 +141,8 @@ export default function DashboardPage() {
 
   const checkAPIHealth = async () => {
     try {
-      console.log('🔍 Checking API health at http://localhost:5001/health');
-      const response = await fetch('http://localhost:5001/health');
+      console.log('🔍 Checking API health at http://localhost:5000/health');
+      const response = await fetch('http://localhost:5000/health');
       const data = await response.json();
       console.log('🏥 API Health Check Response:', data);
       console.log('🏥 Response Status:', response.status);
@@ -182,25 +182,47 @@ export default function DashboardPage() {
 
       console.log('🔍 Search parameters:', { searchTerm, keywords, conditions, filters });
 
+      // Check authentication
+      const authToken = localStorage.getItem('authToken');
+      console.log('🔐 Auth token present:', !!authToken);
+      if (authToken) {
+        console.log('🔐 Auth token length:', authToken.length);
+      }
+
       // Fetch literature search
-      const literatureResponse = await fetch('http://localhost:5001/literature/search', {
+      const literatureResponse = await fetch('http://localhost:5000/literature/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          'Authorization': `Bearer ${authToken}`
         },
         body: JSON.stringify({
           specialty: filters.specialty || 'General Medicine',
           keywords: keywords,
           patient_conditions: conditions,
-          max_results: 10
+          max_results: 10,
+          enable_ai_analysis: true,  // Explicitly enable AI analysis
+          ai_model: 'llama-3.1-8b-instant'
         })
       });
 
       if (literatureResponse.ok) {
         const literatureData = await literatureResponse.json();
         console.log('📚 Literature Search API Response:', literatureData);
-        setSearchResults(literatureData.studies || []);
+        
+        // Specifically log AI analysis
+        if (literatureData.data && literatureData.data.ai_analysis) {
+          console.log('🤖 AI ANALYSIS FOUND:', literatureData.data.ai_analysis);
+          console.log('🧠 AI Analysis Summary:', literatureData.data.ai_analysis.summary);
+          console.log('🔍 Key Findings:', literatureData.data.ai_analysis.key_findings);
+          console.log('⚕️ Clinical Implications:', literatureData.data.ai_analysis.clinical_implications);
+          console.log('📊 Confidence Score:', literatureData.data.ai_analysis.confidence_score);
+        } else {
+          console.log('❌ NO AI ANALYSIS in response');
+          console.log('📋 Available data keys:', Object.keys(literatureData.data || {}));
+        }
+        
+        setSearchResults(literatureData.data?.studies || literatureData.studies || []);
       } else {
         console.error('❌ Literature Search API Error:', await literatureResponse.text());
         setSearchResults([]);
@@ -222,7 +244,7 @@ export default function DashboardPage() {
       console.log('🔍 Extracted conditions:', conditions);
 
       // Risk Assessment
-      const riskResponse = await fetch('http://localhost:5001/analytics/predict-risk', {
+      const riskResponse = await fetch('http://localhost:5000/analytics/predict-risk', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -251,7 +273,7 @@ export default function DashboardPage() {
       }
 
       // Cost Analysis
-      const costResponse = await fetch('http://localhost:5001/analytics/predict-cost', {
+      const costResponse = await fetch('http://localhost:5000/analytics/predict-cost', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -276,7 +298,7 @@ export default function DashboardPage() {
       }
 
       // Population Analysis
-      const populationResponse = await fetch('http://localhost:5001/analytics/population-trends', {
+      const populationResponse = await fetch('http://localhost:5000/analytics/population-trends', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

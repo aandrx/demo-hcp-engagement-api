@@ -2,6 +2,48 @@ import requests
 import json
 import time
 import sys
+import textwrap
+from typing import Dict, Any
+
+# formatting functions
+def format_compact_output(data: Dict[str, Any]) -> str:
+    """Format compact output for better readability print(f"Analysis Type: {analysis_data.get('analysis_type', 'N/A')}")
+                print(f"Model Used: {metadata.get('model_used', 'N/A')}")
+                
+                analysis_result = analysis_data.get('analysis', 'No analysis content')r better readability"""
+    output = []
+    
+    if 'status' in data:
+        status_icon = "PASS" if data['status'] == 'success' else "FAIL"
+        output.append(f"{status_icon} Status: {data['status']}")
+    
+    if 'data' in data:
+        if 'studies' in data['data']:
+            output.append(f"Studies Found: {len(data['data']['studies'])}")
+        
+        if 'ai_analysis' in data['data'] and data['data']['ai_analysis']:
+            analysis = data['data']['ai_analysis']
+            output.append(f"AI Confidence: {analysis.get('confidence_score', 'N/A')}")
+            if 'summary' in analysis:
+                summary = textwrap.fill(analysis['summary'], width=80)
+                output.append(f"Summary: {summary}")
+    
+    if 'metadata' in data:
+        if 'next_steps' in data['metadata']:
+            output.append("Next Steps:")
+            for step in data['metadata']['next_steps'][:2]:
+                output.append(f"   • {step}")
+    
+    return "\n".join(output)
+
+def print_formatted_response(response_data: Dict[str, Any], title: str = ""):
+    """Print formatted API response"""
+    if title:
+        print(f"\n{'='*60}")
+        print(f"{title}")
+        print(f"{'='*60}")
+    
+    print(format_compact_output(response_data))
 
 BASE_URL = "http://localhost:5000"
 
@@ -19,13 +61,13 @@ def get_auth_token():
         print(f"Status Code: {response.status_code}")
         if response.status_code == 200:
             token = response.json()['access_token']
-            print("✅ Login successful")
+            print("Login successful")
             return token
         else:
-            print(f"❌ Login failed: {response.text}")
+            print(f"Login failed: {response.text}")
             return None
     except Exception as e:
-        print(f"❌ Error during login: {e}")
+        print(f"Error during login: {e}")
         return None
 
 def test_health_endpoint():
@@ -43,80 +85,117 @@ def test_health_endpoint():
         print(f"Available Models: {', '.join(groq_info.get('models_available', []))}")
         return True
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
         return False
 
 def test_groq_literature_search(token):
-    """Test literature search with Groq AI analysis"""
-    print("\n=== Testing Groq AI-Enhanced Literature Search ===")
+    """Test literature search with Groq AI analysis and different limits"""
+    print("\n=== Testing Groq AI-Enhanced Literature Search with Different Limits ===")
     
-    payload = {
+    base_payload = {
         "specialty": "Cardiology",
         "keywords": ["heart failure", "statins", "mortality reduction"],
         "patient_conditions": ["hypertension", "diabetes", "hyperlipidemia"],
-        "max_results": 5,
         "enable_ai_analysis": True,
         "ai_model": "llama-3.1-8b-instant"
     }
     
     headers = {"Authorization": f"Bearer {token}"}
     
+    # Test different result limits
+    test_limits = [3, 5, 10]  # You can add more limits like 20, 50, 99
+    
+    all_successful = True
+    
+    for max_results in test_limits:
+        print(f"\nTesting with max_results = {max_results}")
+        print("-" * 50)
+        
+        payload = base_payload.copy()
+        payload["max_results"] = max_results
+        
+        try:
+            response = requests.post(f"{BASE_URL}/literature/search", json=payload, headers=headers, timeout=30)
+            print(f"Status Code: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                print("Search successful!")
+                
+                # Show search metadata
+                metadata = data.get('search_metadata', {})
+                requested = metadata.get('max_results_requested', 'N/A')
+                returned = metadata.get('total_results_returned', 'N/A')
+                print(f"Results: Requested {requested}, Returned {returned}")
+                
+                # Show AI capabilities
+                ai_caps = data.get('ai_capabilities', {})
+                print(f"Groq Available: {ai_caps.get('groq_available', False)}")
+                
+                # Show studies count and sample
+                studies = data.get('studies', [])
+                print(f"Studies Found: {len(studies)}")
+                
+                # Show first 2 studies as sample
+                if studies:
+                    print("\nSample Studies:")
+                    for i, study in enumerate(studies[:2]):
+                        print(f" {i+1}. {study.get('title', 'No title')[:60]}...")
+                        print(f"    Journal: {study.get('journal', 'Unknown')}")
+                        # Use full_url if available, otherwise display_url
+                        link = study.get('full_url') or study.get('display_url', 'No link')
+                        print(f"    Link: {link}")
+                
+                # Show AI analysis summary
+                ai_analysis = data.get('ai_analysis')
+                if ai_analysis:
+                    print(f"AI Confidence: {ai_analysis.get('confidence_score', 'N/A')}")
+                    summary = ai_analysis.get('summary', '')[:100] + "..." if ai_analysis.get('summary') else "No summary"
+                    print(f"AI Summary: {summary}")
+                
+                print("Limit test passed")
+                
+            else:
+                print(f"Search failed with status {response.status_code}")
+                print(f"Response: {response.text}")
+                all_successful = False
+                
+        except Exception as e:
+            print(f"Error testing limit {max_results}: {e}")
+            all_successful = False
+        
+        print("-" * 50)
+        time.sleep(1)  # Brief pause between tests
+    
+    # Test default limit (no max_results specified)
+    print(f"\nTesting with DEFAULT limit (no max_results specified)")
+    print("-" * 50)
+    
     try:
-        print(f"Payload: {json.dumps(payload, indent=2)}")
+        payload = base_payload.copy()
+        # Don't include max_results to test default
+        
         response = requests.post(f"{BASE_URL}/literature/search", json=payload, headers=headers, timeout=30)
         print(f"Status Code: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
-            print("✅ Groq AI-enhanced search successful!")
+            metadata = data.get('search_metadata', {})
+            requested = metadata.get('max_results_requested', 'N/A')
+            returned = metadata.get('total_results_returned', 'N/A')
             
-            # Show AI capabilities
-            ai_caps = data.get('ai_capabilities', {})
-            print(f"🤖 Groq Available: {ai_caps.get('groq_available', False)}")
-            print(f"📊 Model Used: {ai_caps.get('model_used', 'N/A')}")
-            
-            # Show AI analysis results
-            ai_analysis = data.get('ai_analysis')
-            if ai_analysis:
-                print("\n🧠 GROQ AI ANALYSIS RESULTS:")
-                print(f"Summary: {ai_analysis.get('summary', 'No summary')}")
-                print(f"Confidence Score: {ai_analysis.get('confidence_score', 'N/A')}")
-                print(f"Model Used: {ai_analysis.get('model_used', 'Unknown')}")
-                
-                print("\n🔑 KEY FINDINGS:")
-                for i, finding in enumerate(ai_analysis.get('key_findings', [])[:3]):
-                    print(f" {i+1}. {finding}")
-                
-                print("\n💡 CLINICAL IMPLICATIONS:")
-                for i, implication in enumerate(ai_analysis.get('clinical_implications', [])[:2]):
-                    print(f" {i+1}. {implication}")
-                
-                if 'limitations' in ai_analysis:
-                    print("\n⚠️  LIMITATIONS:")
-                    for i, limitation in enumerate(ai_analysis.get('limitations', [])[:2]):
-                        print(f" {i+1}. {limitation}")
-            else:
-                print("ℹ️  AI analysis not available or disabled")
-            
-            # Show studies
-            print(f"\n📚 STUDIES FOUND ({len(data.get('studies', []))}):")
-            for i, study in enumerate(data.get('studies', [])[:2]):
-                print(f" {i+1}. {study.get('title', 'No title')}")
-                print(f"    Journal: {study.get('journal', 'Unknown')}")
-                print(f"    Date: {study.get('publication_date', 'Unknown')}")
-                print(f"    Relevance: {study.get('relevance_score', 'N/A')}")
-                print()
-            
-            return True
+            print("Default limit test successful!")
+            print(f"Default Results: Requested {requested}, Returned {returned}")
+            print("Default should be 99 based on API configuration")
         else:
-            print(f"❌ Search failed with status {response.status_code}")
-            print(f"Response: {response.text}")
-            return False
+            print(f"Default limit test failed")
+            all_successful = False
+            
     except Exception as e:
-        print(f"❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        print(f"Error testing default limit: {e}")
+        all_successful = False
+    
+    return all_successful
 
 def test_different_groq_models(token):
     """Test different Groq models"""
@@ -126,7 +205,7 @@ def test_different_groq_models(token):
     models_to_test = ['llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'llama-3.1-70b-versatile']
     
     for model in models_to_test:
-        print(f"\n🧪 Testing model: {model}")
+        print(f"\nTesting model: {model}")
         
         payload = {
             "specialty": "Oncology",
@@ -145,16 +224,16 @@ def test_different_groq_models(token):
                 data = response.json()
                 ai_analysis = data.get('ai_analysis')
                 if ai_analysis:
-                    print(f"✅ {model}: Success (Confidence: {ai_analysis.get('confidence_score', 'N/A')})")
+                    print(f"{model}: Success (Confidence: {ai_analysis.get('confidence_score', 'N/A')})")
                 else:
-                    print(f"⚠️  {model}: No AI analysis returned")
+                    print(f"{model}: No AI analysis returned")
             else:
-                print(f"❌ {model}: Failed - {response.status_code}")
+                print(f"{model}: Failed - {response.status_code}")
             
             time.sleep(2)  # Rate limiting
                 
         except Exception as e:
-            print(f"❌ {model}: Error - {e}")
+            print(f"{model}: Error - {e}")
 
 def test_groq_direct_analysis(token):
     """Test direct Groq AI analysis endpoint"""
@@ -163,7 +242,7 @@ def test_groq_direct_analysis(token):
     payload = {
         "text": "Heart failure patients with hypertension often benefit from ACE inhibitors and beta-blockers. Recent studies show combination therapy can reduce mortality by up to 30%.",
         "analysis_type": "clinical_implications",
-        "model": "llama-3.1-8b-instant",  # ✅ Use correct model name
+        "model": "llama-3.1-8b-instant",
         "context": "Cardiology patient with heart failure and hypertension"
     }
     
@@ -175,16 +254,43 @@ def test_groq_direct_analysis(token):
         
         if response.status_code == 200:
             data = response.json()
-            print("✅ Direct Groq analysis successful!")
-            print(f"Analysis Type: {data.get('analysis_type')}")
-            print(f"Model Used: {data.get('model_used')}")
-            print(f"Analysis Result: {data.get('analysis', 'No result')[:200]}...")
+            print("Direct Groq analysis successful!")
+            
+            # Debug: Print the full response to see actual structure
+            print(f"\nFull API Response:")
+            print(json.dumps(data, indent=2))
+            
+            # Check the new response structure
+            if data.get('status') == 'success':
+                analysis_data = data.get('data', {})
+                metadata = data.get('metadata', {})
+                
+                print(f"\nAnalysis Type: {analysis_data.get('analysis_type', 'N/A')}")
+                print(f"Model Used: {metadata.get('model_used', 'N/A')}")
+                
+                analysis_result = analysis_data.get('analysis', 'No analysis content')
+                print(f"\nFull Analysis Result:")
+                print("-" * 50)
+                print(analysis_result)
+                print("-" * 50)
+                
+                if 'next_steps' in metadata:
+                    print(f"\nNext Steps:")
+                    for step in metadata.get('next_steps', []):
+                        print(f"   • {step}")
+            else:
+                print(f"API returned error status: {data.get('message', 'Unknown error')}")
+                return False
+            
             return True
         else:
-            print(f"❌ Analysis failed: {response.text}")
+            print(f"Analysis failed with status {response.status_code}")
+            print(f"Response: {response.text}")
             return False
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def test_risk_prediction(token):
@@ -210,73 +316,192 @@ def test_risk_prediction(token):
         print(f"Status Code: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
-            print("✅ Risk prediction successful")
+            print("Risk prediction successful")
             print(f"Risk Score: {data.get('risk_score')}")
             print(f"Risk Level: {data.get('risk_level')}")
             print(f"Risk Factors: {', '.join(data.get('risk_factors', []))}")
             return True
         else:
-            print(f"❌ Prediction failed: {response.text}")
+            print(f"Prediction failed: {response.text}")
             return False
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
+        return False
+
+def test_population_analysis(token):
+    """Test population health trends analysis"""
+    print("\n=== Testing Population Health Analysis ===")
+    
+    # Sample patient data for population analysis - FIXED STRUCTURE
+    patient_data_list = [
+        {
+            "age": 65,
+            "systolic_bp": 150,
+            "glucose": 130,
+            "cholesterol": 260,
+            "bmi": 32,
+            "smoking": 1,
+            "conditions": ["hypertension", "diabetes"]
+        },
+        {
+            "age": 58,
+            "systolic_bp": 142,
+            "glucose": 125,
+            "cholesterol": 240,
+            "bmi": 28,
+            "smoking": 0,
+            "conditions": ["hypertension"]
+        },
+        {
+            "age": 72,
+            "systolic_bp": 160,
+            "glucose": 140,
+            "cholesterol": 280,
+            "bmi": 35,
+            "smoking": 1,
+            "conditions": ["hypertension", "diabetes", "hyperlipidemia"]
+        },
+        {
+            "age": 45,
+            "systolic_bp": 130,
+            "glucose": 95,
+            "cholesterol": 200,
+            "bmi": 25,
+            "smoking": 0,
+            "conditions": []
+        }
+    ]
+    
+    payload = {
+        "patients": patient_data_list
+    }
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    try:
+        response = requests.post(f"{BASE_URL}/analytics/population-trends", json=payload, headers=headers)
+        print(f"Status Code: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            print("Population analysis successful!")
+            
+            # Debug: Print the full response to see what's actually returned
+            print(f"\nFULL RESPONSE:")
+            print(json.dumps(data, indent=2))
+            
+            # Check if we have the expected data structure
+            if 'data' in data:
+                trends = data['data']
+            else:
+                trends = data  # Fallback to direct response
+                
+            print(f"\nPOPULATION HEALTH INSIGHTS:")
+            print(f"Population Size: {trends.get('population_size', 'N/A')}")
+            print(f"Average Age: {trends.get('average_age', 'N/A')}")
+            print(f"Average Risk Score: {trends.get('average_risk_score', 'N/A')}")
+            
+            risk_dist = trends.get('risk_distribution', {})
+            if risk_dist:
+                print(f"Risk Distribution: {risk_dist}")
+                total_patients = sum(risk_dist.values())
+                for risk_level, count in risk_dist.items():
+                    percentage = (count / total_patients) * 100 if total_patients > 0 else 0
+                    print(f"  {risk_level.upper()}: {count} patients ({percentage:.1f}%)")
+            else:
+                print("Risk Distribution: No data")
+            
+            # Show age groups
+            age_groups = trends.get('age_groups', {})
+            if age_groups:
+                print(f"\nAGE GROUPS:")
+                for group, count in age_groups.items():
+                    print(f"  {group.replace('_', ' ').title()}: {count} patients")
+            
+            # Show risk factors prevalence
+            risk_factors = trends.get('risk_factors_prevalence', {})
+            if risk_factors:
+                print(f"\nRISK FACTORS PREVALENCE:")
+                for factor, stats in risk_factors.items():
+                    print(f"  {factor}: {stats.get('count', 0)} patients ({stats.get('prevalence', 0)}%)")
+            
+            return True
+        else:
+            print(f"Population analysis failed: {response.text}")
+            return False
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def run_groq_demo():
     """Run Groq AI-enhanced demonstration"""
-    print("🚀 Starting Groq-Powered HCP API Demo")
+    print("Starting Groq-Powered HCP API Demo")
     print("=" * 60)
+    
+    test_results = {}
     
     # Health check
     if not test_health_endpoint():
-        print("❌ Health check failed")
+        print("Health check failed")
         return False
     
     # Get token
     token = get_auth_token()
     if not token:
-        print("❌ Authentication failed")
+        print("Authentication failed")
         return False
     
     # Run Groq-enhanced tests
     tests = [
-        ("Groq Literature Search", test_groq_literature_search),
+        ("Groq Literature Search with Limits", test_groq_literature_search),
         ("Direct Groq Analysis", test_groq_direct_analysis),
         ("Risk Prediction", test_risk_prediction),
+        ("Population Analysis", test_population_analysis),
+        # Optional: Add this for quick limit testing
+        # ("Quick Limit Testing", test_result_limits_only),
     ]
     
-    results = []
     for test_name, test_func in tests:
         print(f"\n{'='*50}")
-        print(f"🧪 TEST: {test_name}")
+        print(f"TEST: {test_name}")
         print(f"{'='*50}")
         result = test_func(token)
-        results.append(result)
-        time.sleep(3)  # Longer pause for Groq API calls
+        test_results[test_name] = {
+            'status': 'success' if result else 'failed',
+            'timestamp': time.time()
+        }
+        time.sleep(2)
     
     # Test different models
     test_different_groq_models(token)
     
-    # Summary
+    # Enhanced summary
     print("\n" + "=" * 60)
-    print("📊 GROQ AI DEMO SUMMARY")
+    print("GROQ AI DEMO SUMMARY")
     print("=" * 60)
-    print(f"Tests Completed: {len(tests)}")
-    print(f"Successful: {sum(results)}")
-    print(f"Failed: {len(tests) - sum(results)}")
     
-    if sum(results) >= 2:  # At least 2 successful
-        print("✅ Groq AI demo completed successfully!")
-        print("\n🎯 Key Features Demonstrated:")
-        print("• Ultra-fast Groq AI inference")
-        print("• Multiple model support (Llama 3, Mixtral)")
-        print("• Intelligent literature relevance analysis")
-        print("• Clinical context understanding")
-        print("• Direct AI analysis endpoint")
-    else:
-        print("Some tests failed")
+    successful_tests = sum(1 for result in test_results.values() if result['status'] == 'success')
+    total_tests = len(test_results)
     
-    return sum(results) >= 2
+    print(f"Tests Completed: {total_tests}")
+    print(f"Successful: {successful_tests}")
+    print(f"Failed: {total_tests - successful_tests}")
+    print(f"Success Rate: {(successful_tests/total_tests)*100:.1f}%")
+    
+    print("\nFeatures Demonstrated:")
+    features = [
+        "• Configurable result limits (1-99)",
+        "• Default limit of 99 results", 
+        "• Ultra-fast Groq AI inference",
+        "• Multiple response formats",
+        "• Population health analytics"
+    ]
+    for feature in features:
+        print(feature)
+    
+    return successful_tests >= 2
 
 if __name__ == "__main__":
     time.sleep(3)

@@ -22,7 +22,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:5001/auth/login', {
+      const response = await fetch('http://localhost:5000/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -49,7 +49,7 @@ export default function LoginPage() {
       console.error('❌ Error Message:', error.message);
       console.error('❌ Full Error Object:', error);
       console.error('❌ Stack Trace:', error.stack);
-      console.error('❌ Request URL:', 'http://localhost:5001/auth/login');
+      console.error('❌ Request URL:', 'http://localhost:5000/auth/login');
       console.error('❌ Request Method:', 'POST');
       console.error('❌ Request Headers:', {
         'Content-Type': 'application/json',
@@ -61,7 +61,7 @@ export default function LoginPage() {
       console.error('❌ Timestamp:', new Date().toISOString());
       
       // Check if API is reachable
-      fetch('http://localhost:5001/health')
+      fetch('http://localhost:5000/health')
         .then(response => {
           console.log('✅ API Health Check Response:', response.status, response.statusText);
           return response.json();
