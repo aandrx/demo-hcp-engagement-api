@@ -43,17 +43,45 @@ export default function LoginPage() {
         setError(data.message || 'Login failed');
       }
     } catch (error) {
-      console.error('Login error details:', error);
-      console.error('Error type:', error.constructor.name);
-      console.error('Error message:', error.message);
-      console.error('Full error:', error);
+      console.group('🚨 LOGIN ERROR - API DEBUG INFO');
+      console.error('❌ Error Type:', error.constructor.name);
+      console.error('❌ Error Name:', error.name);
+      console.error('❌ Error Message:', error.message);
+      console.error('❌ Full Error Object:', error);
+      console.error('❌ Stack Trace:', error.stack);
+      console.error('❌ Request URL:', 'http://localhost:5001/auth/login');
+      console.error('❌ Request Method:', 'POST');
+      console.error('❌ Request Headers:', {
+        'Content-Type': 'application/json',
+        'Origin': window.location.origin
+      });
+      console.error('❌ Request Body:', { username, password: '***' });
+      console.error('❌ Current URL:', window.location.href);
+      console.error('❌ User Agent:', navigator.userAgent);
+      console.error('❌ Timestamp:', new Date().toISOString());
+      
+      // Check if API is reachable
+      fetch('http://localhost:5001/health')
+        .then(response => {
+          console.log('✅ API Health Check Response:', response.status, response.statusText);
+          return response.json();
+        })
+        .then(data => {
+          console.log('✅ API Health Data:', data);
+        })
+        .catch(healthError => {
+          console.error('❌ API Health Check Failed:', healthError);
+          console.error('❌ This means the API is not running or not accessible');
+        });
+      
+      console.groupEnd();
       
       if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-        setError('CORS Error: API is running but CORS is blocking the request. Check browser console for details.');
+        setError('CORS Error: API is running but CORS is blocking the request. Check browser console for full debug info.');
       } else if (error.name === 'TypeError' && error.message.includes('NetworkError')) {
-        setError('Network Error: Cannot connect to API. Make sure it\'s running on port 5001.');
+        setError('Network Error: Cannot connect to API. Check console for API health status.');
       } else {
-        setError(`Connection error: ${error.message || 'Unknown error'}`);
+        setError(`Connection error: ${error.message || 'Unknown error'}. Check console for details.`);
       }
     } finally {
       setIsLoading(false);

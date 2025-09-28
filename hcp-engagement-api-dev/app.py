@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_restx import Api, Resource, fields
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
+from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity
 import jwt
 import bcrypt
 from passlib.context import CryptContext
@@ -626,6 +627,69 @@ class GroqAnalysisService:
             'model_used': 'rule_based_fallback',
             'analysis_timestamp': datetime.utcnow().isoformat()
         }
+    
+    def generate_suggestions(self, prompt: str, max_suggestions: int = 8) -> List[str]:
+        """Generate AI-powered search suggestions using Groq"""
+        try:
+            if not self.groq_available:
+                logger.warning("Groq API not available, returning empty suggestions")
+                return []
+            
+            # Use the fastest model for suggestions
+            model = 'llama-3.1-8b-instant'
+            
+            response = requests.post(
+                f"{app.config['GROQ_API_URL']}/chat/completions",
+                headers={
+                    'Authorization': f'Bearer {app.config["GROQ_API_KEY"]}',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'model': model,
+                    'messages': [
+                        {
+                            'role': 'system',
+                            'content': 'You are a medical search assistant. Generate relevant medical search suggestions. Return only a JSON array of strings, no other text.'
+                        },
+                        {
+                            'role': 'user',
+                            'content': prompt
+                        }
+                    ],
+                    'max_tokens': 500,
+                    'temperature': 0.7
+                },
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                content = data['choices'][0]['message']['content'].strip()
+                
+                # Try to parse as JSON array
+                try:
+                    suggestions = json.loads(content)
+                    if isinstance(suggestions, list):
+                        return suggestions[:max_suggestions]
+                except json.JSONDecodeError:
+                    # If not JSON, split by lines and clean up
+                    lines = content.split('\n')
+                    suggestions = []
+                    for line in lines:
+                        line = line.strip()
+                        if line and not line.startswith('#') and not line.startswith('-'):
+                            # Remove numbering and bullet points
+                            clean_line = line.replace('^\\d+\\.\\s*', '').replace('^-\\s*', '').strip()
+                            if clean_line:
+                                suggestions.append(clean_line)
+                    return suggestions[:max_suggestions]
+            
+            logger.error(f"Groq API error: {response.status_code}")
+            return []
+            
+        except Exception as e:
+            logger.error(f"Error generating suggestions: {e}")
+            return []
 
 # Enhanced Literature Service with Groq AI Analysis
 class RealDataLiteratureService:
@@ -1011,6 +1075,68 @@ def health():
         'open_source': True
     }
 
+# AI Suggestions endpoint
+@ns_ai.route('/suggestions')
+class AISuggestions(Resource):
+    @jwt_required()
+    def post(self):
+        """Generate AI-powered search suggestions using Groq"""
+        try:
+            data = request.get_json()
+            query = data.get('query', '').strip()
+            specialty = data.get('specialty', 'General Medicine')
+            max_suggestions = data.get('max_suggestions', 8)
+            
+            if not query or len(query) < 3:
+                return {'suggestions': []}, 200
+            
+            # Get current user for context
+            current_user = get_jwt_identity()
+            
+            # Create AI prompt for suggestions
+            prompt = f"""You are a medical search assistant. Generate {max_suggestions} relevant medical search suggestions based on the user's query: "{query}"
+
+User context:
+- Specialty: {specialty}
+- Current user: {current_user}
+
+Generate suggestions that are:
+1. Clinically relevant and specific
+2. Related to the user's specialty when applicable
+3. Include both broad and specific terms
+4. Cover different aspects (diagnosis, treatment, research, guidelines)
+5. Use proper medical terminology
+
+Format as a JSON array of strings. Each suggestion should be a complete, searchable medical term or phrase.
+
+Examples of good suggestions:
+- "diabetes management guidelines"
+- "hypertension treatment protocols"
+- "cardiac rehabilitation outcomes"
+- "pediatric vaccine schedules"
+- "mental health assessment tools"
+
+Query: "{query}"
+Specialty: {specialty}
+
+Generate {max_suggestions} suggestions:"""
+
+            # Use Groq AI to generate suggestions
+            suggestions = ai_service.generate_suggestions(prompt, max_suggestions)
+            
+            logger.info(f"Generated {len(suggestions)} AI suggestions for query: {query}")
+            
+            return {
+                'suggestions': suggestions,
+                'query': query,
+                'specialty': specialty,
+                'count': len(suggestions)
+            }, 200
+            
+        except Exception as e:
+            logger.error(f"AI suggestions error: {e}")
+            return {'message': 'Failed to generate suggestions', 'suggestions': []}, 500
+
 # Error handlers
 @app.errorhandler(404)
 def not_found(error):
@@ -1028,4 +1154,4 @@ if __name__ == '__main__':
     logger.info("Authentication: Bearer token required")
     logger.info("WebSocket: Real-time notifications available")
     
-    socketio.run(app, host='0.0.0.0', port=5001, debug=os.getenv('FLASK_DEBUG', False))
+    socketio.run(app, host='0.0.0.0', port=5001, debug=os.getenv('FLASK_DEBUG', False), allow_unsafe_werkzeug=True)
