@@ -1028,4 +1028,4 @@ if __name__ == '__main__':
     logger.info("Authentication: Bearer token required")
     logger.info("WebSocket: Real-time notifications available")
     
-    socketio.run(app, host='0.0.0.0', port=5000, debug=os.getenv('FLASK_DEBUG', False))
+    socketio.run(app, host='0.0.0.0', port=5001, debug=os.getenv('FLASK_DEBUG', False))
