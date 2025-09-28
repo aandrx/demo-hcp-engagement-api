@@ -43,7 +43,18 @@ export default function LoginPage() {
         setError(data.message || 'Login failed');
       }
     } catch (error) {
-      setError('Connection error. Please check if the API is running.');
+      console.error('Login error details:', error);
+      console.error('Error type:', error.constructor.name);
+      console.error('Error message:', error.message);
+      console.error('Full error:', error);
+      
+      if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+        setError('CORS Error: API is running but CORS is blocking the request. Check browser console for details.');
+      } else if (error.name === 'TypeError' && error.message.includes('NetworkError')) {
+        setError('Network Error: Cannot connect to API. Make sure it\'s running on port 5001.');
+      } else {
+        setError(`Connection error: ${error.message || 'Unknown error'}`);
+      }
     } finally {
       setIsLoading(false);
     }

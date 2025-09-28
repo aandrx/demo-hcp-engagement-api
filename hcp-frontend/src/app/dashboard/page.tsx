@@ -141,12 +141,18 @@ export default function DashboardPage() {
 
   const checkAPIHealth = async () => {
     try {
+      console.log('🔍 Checking API health at http://localhost:5001/health');
       const response = await fetch('http://localhost:5001/health');
       const data = await response.json();
-      console.log('🏥 API Health Check:', data);
+      console.log('🏥 API Health Check Response:', data);
+      console.log('🏥 Response Status:', response.status);
+      console.log('🏥 Response Headers:', Object.fromEntries(response.headers.entries()));
       return response.ok;
     } catch (error) {
-      console.error('❌ API Health Check Failed:', error);
+      console.error('❌ API Health Check Failed:');
+      console.error('❌ Error type:', error.constructor.name);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Full error:', error);
       return false;
     }
   };
