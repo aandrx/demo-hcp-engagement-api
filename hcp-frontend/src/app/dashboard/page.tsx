@@ -141,8 +141,8 @@ export default function DashboardPage() {
 
   const checkAPIHealth = async () => {
     try {
-      console.log('🔍 Checking API health at http://localhost:5000/health');
-      const response = await fetch('http://localhost:5000/health');
+      console.log('🔍 Checking API health at /api/proxy/health');
+      const response = await fetch('/api/proxy/health');
       const data = await response.json();
       console.log('🏥 API Health Check Response:', data);
       console.log('🏥 Response Status:', response.status);
@@ -173,7 +173,7 @@ export default function DashboardPage() {
       // Check API health first
       const isAPIHealthy = await checkAPIHealth();
       if (!isAPIHealthy) {
-        console.error('❌ API is not responding. Please check if the backend is running on port 5001');
+        console.error('❌ API is not responding. Please check if the backend is running on port 5000');
         return;
       }
 
@@ -190,7 +190,7 @@ export default function DashboardPage() {
       }
 
       // Fetch literature search
-      const literatureResponse = await fetch('http://localhost:5000/literature/search', {
+      const literatureResponse = await fetch('/api/proxy/literature/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -244,7 +244,7 @@ export default function DashboardPage() {
       console.log('🔍 Extracted conditions:', conditions);
 
       // Risk Assessment
-      const riskResponse = await fetch('http://localhost:5000/analytics/predict-risk', {
+      const riskResponse = await fetch('/api/proxy/analytics/predict-risk', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -273,7 +273,7 @@ export default function DashboardPage() {
       }
 
       // Cost Analysis
-      const costResponse = await fetch('http://localhost:5000/analytics/predict-cost', {
+      const costResponse = await fetch('/api/proxy/analytics/predict-cost', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -298,7 +298,7 @@ export default function DashboardPage() {
       }
 
       // Population Analysis
-      const populationResponse = await fetch('http://localhost:5000/analytics/population-trends', {
+      const populationResponse = await fetch('/api/proxy/analytics/population-trends', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
