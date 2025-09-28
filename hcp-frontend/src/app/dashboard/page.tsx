@@ -21,7 +21,10 @@ import {
   Users,
   AlertTriangle,
   CheckCircle,
-  Clock
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Brain
 } from 'lucide-react';
 
 interface User {
@@ -89,6 +92,8 @@ export default function DashboardPage() {
   const [populationAnalysis, setPopulationAnalysis] = useState<PopulationAnalysis | null>(null);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const [expandedArticles, setExpandedArticles] = useState<Set<number>>(new Set());
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
   
   const router = useRouter();
 
@@ -323,6 +328,11 @@ export default function DashboardPage() {
       }
 
       setShowAnalytics(true);
+      
+      // Generate AI summary after analytics are loaded
+      setTimeout(() => {
+        generateAISummary();
+      }, 1000);
     } catch (error) {
       console.error('Analytics error:', error);
     }
@@ -338,6 +348,41 @@ export default function DashboardPage() {
 
   const removeSearchTag = (tag: string) => {
     setSearchTags(searchTags.filter((t: string) => t !== tag));
+  };
+
+  const toggleArticle = (index: number) => {
+    const newExpanded = new Set(expandedArticles);
+    if (newExpanded.has(index)) {
+      newExpanded.delete(index);
+    } else {
+      newExpanded.add(index);
+    }
+    setExpandedArticles(newExpanded);
+  };
+
+  const generateAISummary = async () => {
+    try {
+      const response = await fetch('/api/proxy/ai/summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        },
+        body: JSON.stringify({
+          search_results: searchResults,
+          risk_assessment: riskAssessment,
+          cost_analysis: costAnalysis,
+          population_analysis: populationAnalysis
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAiSummary(data.summary);
+      }
+    } catch (error) {
+      console.error('AI Summary error:', error);
+    }
   };
 
   const quickActions = [
@@ -550,34 +595,60 @@ export default function DashboardPage() {
                 Found {searchResults.length} results
               </p>
             </div>
-            <div className="space-y-6">
-              {searchResults.map((result, index) => (
-                <div key={index} className="border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-3">
-                    {result.title}
-                  </h4>
-                  <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-3">
-                    <span><strong>Journal:</strong> {result.journal}</span>
-                    <span><strong>Date:</strong> {result.publication_date}</span>
-                    <span><strong>Source:</strong> {result.source}</span>
-                    <span><strong>Relevance:</strong> {Math.round(result.relevance_score * 100)}%</span>
-                  </div>
-                  <p className="text-gray-700 mb-4 leading-relaxed">
-                    {result.abstract}
-                  </p>
-                  {result.url && (
-                    <a
-                      href={result.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-medium"
+            <div className="space-y-4">
+              {searchResults.map((result, index) => {
+                const isExpanded = expandedArticles.has(index);
+                return (
+                  <div key={index} className="border border-gray-200 rounded-xl hover:shadow-md transition-shadow">
+                    <button
+                      onClick={() => toggleArticle(index)}
+                      className="w-full p-6 text-left hover:bg-gray-50 transition-colors rounded-xl"
                     >
-                      View Full Article
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                  )}
-                </div>
-              ))}
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                            {result.title}
+                          </h4>
+                          <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                            <span><strong>Journal:</strong> {result.journal}</span>
+                            <span><strong>Date:</strong> {result.publication_date}</span>
+                            <span><strong>Source:</strong> {result.source}</span>
+                            <span><strong>Relevance:</strong> {Math.round(result.relevance_score * 100)}%</span>
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          {isExpanded ? (
+                            <ChevronUp className="w-5 h-5 text-gray-400" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5 text-gray-400" />
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                    
+                    {isExpanded && (
+                      <div className="px-6 pb-6">
+                        <div className="border-t pt-4">
+                          <p className="text-gray-700 mb-4 leading-relaxed">
+                            {result.abstract}
+                          </p>
+                          {result.url && (
+                            <a
+                              href={result.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-medium"
+                            >
+                              View Full Article
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -787,6 +858,34 @@ export default function DashboardPage() {
                 </div>
                 <div className="text-xs text-gray-500">Average age</div>
               </div>
+            </div>
+
+            {/* AI Summary Section */}
+            <div className="mt-8 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-6 border border-purple-200">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <Brain className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <h4 className="text-lg font-semibold text-gray-900">AI Summary</h4>
+                </div>
+                <button
+                  onClick={generateAISummary}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                >
+                  Generate Summary
+                </button>
+              </div>
+              
+              {aiSummary ? (
+                <div className="bg-white rounded-lg p-4 border border-purple-200">
+                  <p className="text-gray-700 leading-relaxed">{aiSummary}</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg p-4 border border-purple-200 text-center">
+                  <p className="text-gray-500 italic">Click "Generate Summary" to get an AI-powered analysis of your search results and analytics data.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
