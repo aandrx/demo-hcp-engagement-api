@@ -22,7 +22,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:5001/auth/login', {
+      const response = await fetch('/api/proxy/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -60,8 +60,8 @@ export default function LoginPage() {
       console.error('❌ User Agent:', navigator.userAgent);
       console.error('❌ Timestamp:', new Date().toISOString());
       
-      // Check if API is reachable
-      fetch('http://localhost:5001/health')
+         // Check if API is reachable
+         fetch('/api/proxy/health')
         .then(response => {
           console.log('✅ API Health Check Response:', response.status, response.statusText);
           return response.json();

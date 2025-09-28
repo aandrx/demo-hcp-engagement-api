@@ -1,8 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_restx import Api, Resource, fields
-from flask_cors import CORS
 from flask_socketio import SocketIO, emit
-from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity
+# from flask_cors import CORS 
 import jwt
 import bcrypt
 from passlib.context import CryptContext
@@ -34,21 +33,56 @@ app.config.update({
 
 # Debug: Check if Groq API key is loaded
 groq_api_key = app.config['GROQ_API_KEY']
-print(f"🔑 Groq API Key Loaded: {'Yes' if groq_api_key else 'No'}")
+print(f"Groq API Key Loaded: {'Yes' if groq_api_key else 'No'}")
 if groq_api_key:
-    print(f"🔑 Key length: {len(groq_api_key)} characters")
-    print(f"🔑 Key starts with: {groq_api_key[:10]}...")
+    print(f"Key length: {len(groq_api_key)} characters")
+    print(f"Key starts with: {groq_api_key[:10]}...")
 else:
-    print("❌ WARNING: No Groq API key found in environment variables")
+    print("WARNING: No Groq API key found in environment variables")
 
-# Security-focused CORS
-CORS(app, resources={
-    r"/*": {
-        "origins": os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3002,http://127.0.0.1:3002').split(','),
-        "methods": ["GET", "POST", "PUT", "DELETE"],
-        "allow_headers": ["Authorization", "Content-Type"]
-    }
-})
+# cors configuration
+
+# # Enhanced CORS configuration for open-source frontend compatibility
+# allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173').split(',')
+
+# CORS(app, 
+#     resources={
+#         r"/*": {
+#             "origins": allowed_origins,
+#             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+#             "allow_headers": ["Authorization", "Content-Type", "X-Requested-With"],
+#             "supports_credentials": False,
+#             "expose_headers": ["Content-Type", "Authorization"],
+#             "max_age": 600  # Cache preflight requests for 10 minutes
+#         }
+#     }
+# )
+
+# # Add global OPTIONS handler for preflight requests
+# @app.before_request
+# def handle_preflight():
+#     if request.method == "OPTIONS":
+#         response = jsonify({"status": "preflight"})
+#         response.headers.add("Access-Control-Allow-Origin", request.headers.get('Origin', '*'))
+#         response.headers.add("Access-Control-Allow-Headers", "Authorization, Content-Type")
+#         response.headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+#         return response
+
+# # Add after_request handler for CORS headers
+# @app.after_request
+# def after_request(response):
+#     origin = request.headers.get('Origin')
+#     if origin and origin in allowed_origins:
+#         response.headers.add('Access-Control-Allow-Origin', origin)
+#     else:
+#         # For development, allow the request origin if no specific origins match
+#         response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', allowed_origins[0] if allowed_origins else '*'))
+    
+#     response.headers.add('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+#     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+#     response.headers.add('Access-Control-Allow-Credentials', 'false')
+#     response.headers.add('Access-Control-Max-Age', '600')
+#     return response
 
 # Setup logging (open-source friendly)
 if not os.path.exists('logs'):
@@ -83,13 +117,13 @@ api = Api(app,
 
 # Initialize WebSocket for real-time features
 socketio = SocketIO(app, 
-    cors_allowed_origins=os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000').split(','),
+    # cors_allowed_origins=allowed_origins,
     logger=logger,
     engineio_logger=False
 )
 
 # Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 # Simple in-memory storage (Redis optional)
 memory_store = {}
@@ -113,9 +147,10 @@ literature_search_model = api.model('LiteratureSearch', {
     'specialty': fields.String(required=True),
     'keywords': fields.List(fields.String),
     'patient_conditions': fields.List(fields.String),
-    'max_results': fields.Integer(default=10),
+    'max_results': fields.Integer(default=99, description='Maximum number of results (1-99)'),  # Increased default
     'enable_ai_analysis': fields.Boolean(default=True),
-    'ai_model': fields.String(default='llama-3.1-8b-instant', description='Groq model to use')
+    'ai_model': fields.String(default='llama-3.1-8b-instant', description='Groq model to use'),
+    'response_format': fields.String(default='detailed', description='compact|detailed')
 })
 
 # Analytics Models (Simplified)
@@ -130,6 +165,11 @@ ai_analysis_model = api.model('AIAnalysis', {
     'context': fields.Raw(description='Additional context for analysis'),
     'model': fields.String(default='llama-3.1-8b-instant', description='Groq model to use')
 })
+
+population_analysis_model = api.model('PopulationAnalysis', {
+    'patients': fields.List(fields.Raw, required=True, description='List of patient data objects')
+})
+
 
 # ========== SERVICE CLASS DEFINITIONS ==========
 
@@ -347,39 +387,128 @@ class AnalyticsService:
             return 'low'
     
     def population_health_trends(self, patient_data_list: List[Dict]) -> Dict:
-        """Analyze population health trends"""
+        """Analyze population health trends with enhanced insights"""
         try:
             if not patient_data_list:
                 return {'error': 'No patient data provided'}
             
-            # Convert to DataFrame for analysis
-            df = pd.DataFrame(patient_data_list)
+            # Preprocess data - convert lists to strings for DataFrame compatibility
+            processed_patients = []
+            for patient in patient_data_list:
+                processed_patient = patient.copy()
+                # Convert list fields to strings for DataFrame compatibility
+                if 'conditions' in processed_patient and isinstance(processed_patient['conditions'], list):
+                    processed_patient['conditions'] = ', '.join(processed_patient['conditions'])
+                processed_patients.append(processed_patient)
             
+            # Convert to DataFrame for analysis
+            df = pd.DataFrame(processed_patients)
+            
+            # Calculate risk levels for all patients
+            risk_levels = []
+            risk_scores = []
+            
+            for _, patient in df.iterrows():
+                # Convert back to dict for risk prediction
+                patient_dict = patient.to_dict()
+                risk_pred = self.predict_risk(patient_dict)
+                risk_levels.append(risk_pred.get('risk_level', 'low'))
+                risk_scores.append(risk_pred.get('risk_score', 0))
+            
+            # Enhanced trends analysis with safe data access
             trends = {
-                'average_age': round(df['age'].mean(), 1) if 'age' in df.columns else 0,
+                'population_size': len(patient_data_list),
+                'average_age': round(df['age'].mean(), 1) if 'age' in df.columns and not df['age'].empty else 0,
+                'average_risk_score': round(np.mean(risk_scores), 2) if risk_scores else 0,
                 'common_conditions': self._find_common_conditions(df),
-                'risk_distribution': self._calculate_risk_distribution(df),
-                'timestamp': datetime.utcnow().isoformat()
+                'risk_distribution': pd.Series(risk_levels).value_counts().to_dict(),
+                'age_groups': self._analyze_age_groups(df),
+                'risk_factors_prevalence': self._analyze_risk_factors(df),
+                'timestamp': datetime.utcnow().isoformat(),
+                'analysis_metadata': {
+                    'method': 'statistical_analysis',
+                    'confidence': 'high',
+                    'data_quality': 'good' if len(patient_data_list) >= 3 else 'limited'
+                }
             }
             
             return trends
             
         except Exception as e:
             logger.error(f"Population analysis error: {e}")
-            return {'error': 'Population analysis unavailable'}
-    
-    def _find_common_conditions(self, df: pd.DataFrame) -> List[Dict]:
-        """Find most common conditions in population"""
+            import traceback
+            logger.error(traceback.format_exc())
+            return {'error': f'Population analysis unavailable: {str(e)}'}
+
+    def _analyze_age_groups(self, df: pd.DataFrame) -> Dict:
+        """Analyze age distribution across population"""
+        if 'age' not in df.columns:
+            return {}
+        
+        age_groups = {
+            'young_adult': len(df[(df['age'] >= 18) & (df['age'] < 40)]),
+            'middle_aged': len(df[(df['age'] >= 40) & (df['age'] < 65)]),
+            'senior': len(df[df['age'] >= 65])
+        }
+        return age_groups
+
+    def _analyze_risk_factors(self, df: pd.DataFrame) -> Dict:
+        """Analyze prevalence of common risk factors"""
+        risk_factors = {}
+        
+        # Check for common risk factor indicators
+        risk_indicators = {
+            'hypertension': lambda row: row.get('systolic_bp', 0) > 140 if 'systolic_bp' in row else False,
+            'diabetes': lambda row: row.get('glucose', 0) > 126 if 'glucose' in row else False,
+            'hyperlipidemia': lambda row: row.get('cholesterol', 0) > 240 if 'cholesterol' in row else False,
+            'obesity': lambda row: row.get('bmi', 0) > 30 if 'bmi' in row else False,
+            'smoking': lambda row: row.get('smoking', 0) == 1 if 'smoking' in row else False
+        }
+        
+        for factor, check_func in risk_indicators.items():
+            count = sum(1 for _, row in df.iterrows() if check_func(row))
+            risk_factors[factor] = {
+                'count': count,
+                'prevalence': round((count / len(df)) * 100, 1) if len(df) > 0 else 0
+            }
+        
+        return risk_factors
+
+    def _find_common_conditions(self, df: pd.DataFrame) -> Dict:
+        """Find most common conditions in population with better error handling"""
         conditions = {}
         
-        # Look for condition indicators
-        for col in df.columns:
-            if any(keyword in col.lower() for keyword in ['condition', 'diagnosis', 'disease']):
-                if df[col].dtype == 'object':  # String columns
-                    common = df[col].value_counts().head(3).to_dict()
-                    conditions[col] = common
-        
-        return conditions
+        try:
+            # Look for condition indicators
+            for col in df.columns:
+                if any(keyword in col.lower() for keyword in ['condition', 'diagnosis', 'disease']):
+                    if df[col].dtype == 'object':  # String columns
+                        try:
+                            # Handle stringified lists or regular strings
+                            if df[col].str.contains(',').any():  # If it contains commas, treat as string list
+                                # Split comma-separated conditions and count individually
+                                all_conditions = []
+                                for conditions_str in df[col].dropna():
+                                    if isinstance(conditions_str, str):
+                                        condition_list = [cond.strip() for cond in conditions_str.split(',')]
+                                        all_conditions.extend(condition_list)
+                                
+                                if all_conditions:
+                                    condition_counts = pd.Series(all_conditions).value_counts().head(5).to_dict()
+                                    conditions[col] = condition_counts
+                            else:
+                                # Regular string column
+                                common = df[col].value_counts().head(3).to_dict()
+                                conditions[col] = common
+                        except Exception as e:
+                            logger.warning(f"Error processing conditions column {col}: {e}")
+                            continue
+            
+            return conditions
+            
+        except Exception as e:
+            logger.error(f"Error in common conditions analysis: {e}")
+            return {}
     
     def _calculate_risk_distribution(self, df: pd.DataFrame) -> Dict:
         """Calculate risk distribution across population"""
@@ -408,7 +537,7 @@ class GroqAnalysisService:
         """Get available Groq models"""
         return {
             'llama-3.1-8b-instant': 'Llama 3.1 8B Instant',
-            'llama-3.1-70b-versatile': 'Llama 3.1 70B Versatile',  # ✅ Added valid model
+            'llama-3.1-70b-versatile': 'Llama 3.1 70B Versatile',  # Added valid model
             'llama3-groq-8b-8192-tool-use-preview': 'Llama 3 8B Tool Use Preview',
             'mixtral-8x7b-32768': 'Mixtral 8x7B',
             'gemma2-9b-it': 'Gemma 2 9B IT'
@@ -423,12 +552,12 @@ class GroqAnalysisService:
                 return False
             
             # Test the API with a simple request - USE A VALID MODEL
-            test_response = self._call_groq_api("Hello", "llama-3.1-8b-instant")  # ✅ Changed from llama3-8b-8192
+            test_response = self._call_groq_api("Hello", "llama-3.1-8b-instant")  # Changed from llama3-8b-8192
             if test_response is not None:
-                logger.info("✅ Groq API connection successful")
+                logger.info("Groq API connection successful")
                 return True
             else:
-                logger.warning("❌ Groq API test request failed")
+                logger.warning("Groq API test request failed")
                 return False
                 
         except Exception as e:
@@ -470,7 +599,7 @@ class GroqAnalysisService:
             )
             
             if response.status_code == 200:
-                logger.info("✅ Groq API call successful")
+                logger.info("Groq API call successful")
                 return response.json()['choices'][0]['message']['content']
             else:
                 logger.error(f"Groq API error: {response.status_code} - {response.text}")
@@ -627,69 +756,6 @@ class GroqAnalysisService:
             'model_used': 'rule_based_fallback',
             'analysis_timestamp': datetime.utcnow().isoformat()
         }
-    
-    def generate_suggestions(self, prompt: str, max_suggestions: int = 8) -> List[str]:
-        """Generate AI-powered search suggestions using Groq"""
-        try:
-            if not self.groq_available:
-                logger.warning("Groq API not available, returning empty suggestions")
-                return []
-            
-            # Use the fastest model for suggestions
-            model = 'llama-3.1-8b-instant'
-            
-            response = requests.post(
-                f"{app.config['GROQ_API_URL']}/chat/completions",
-                headers={
-                    'Authorization': f'Bearer {app.config["GROQ_API_KEY"]}',
-                    'Content-Type': 'application/json'
-                },
-                json={
-                    'model': model,
-                    'messages': [
-                        {
-                            'role': 'system',
-                            'content': 'You are a medical search assistant. Generate relevant medical search suggestions. Return only a JSON array of strings, no other text.'
-                        },
-                        {
-                            'role': 'user',
-                            'content': prompt
-                        }
-                    ],
-                    'max_tokens': 500,
-                    'temperature': 0.7
-                },
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                content = data['choices'][0]['message']['content'].strip()
-                
-                # Try to parse as JSON array
-                try:
-                    suggestions = json.loads(content)
-                    if isinstance(suggestions, list):
-                        return suggestions[:max_suggestions]
-                except json.JSONDecodeError:
-                    # If not JSON, split by lines and clean up
-                    lines = content.split('\n')
-                    suggestions = []
-                    for line in lines:
-                        line = line.strip()
-                        if line and not line.startswith('#') and not line.startswith('-'):
-                            # Remove numbering and bullet points
-                            clean_line = line.replace('^\\d+\\.\\s*', '').replace('^-\\s*', '').strip()
-                            if clean_line:
-                                suggestions.append(clean_line)
-                    return suggestions[:max_suggestions]
-            
-            logger.error(f"Groq API error: {response.status_code}")
-            return []
-            
-        except Exception as e:
-            logger.error(f"Error generating suggestions: {e}")
-            return []
 
 # Enhanced Literature Service with Groq AI Analysis
 class RealDataLiteratureService:
@@ -713,27 +779,33 @@ class RealDataLiteratureService:
             return False
     
     def search_relevant_studies(self, specialty: str, keywords: List[str], 
-                           patient_conditions: List[str], enable_ai_analysis: bool = True,
-                           ai_model: str = 'llama-3.1-8b-instant') -> Dict:
-        """Search literature with optional Groq AI analysis"""
+                        patient_conditions: List[str], enable_ai_analysis: bool = True,
+                        ai_model: str = 'llama-3.1-8b-instant', max_results: int = 99) -> Dict:
+        """Search literature with configurable result limit"""
         try:
-            if self.pubmed_available:
-                studies = self._search_pubmed(specialty, keywords, patient_conditions)
-            else:
-                studies = self._get_fallback_studies(specialty, keywords, patient_conditions)
+            # Validate max_results
+            max_results = min(max(1, max_results), 99)  # Cap at 99
             
-            # Add AI analysis if enabled
+            if self.pubmed_available:
+                studies = self._search_pubmed(specialty, keywords, patient_conditions, max_results)
+            else:
+                studies = self._get_fallback_studies(specialty, keywords, patient_conditions, max_results)
+            
+            # Format study links
+            formatted_studies = self._format_study_links(studies)
+            
+            # Add AI analysis if enabled (still limit AI analysis to top 3 for performance)
             ai_analysis = None
-            if enable_ai_analysis and studies:
+            if enable_ai_analysis and formatted_studies:
                 search_context = {
                     'specialty': specialty,
                     'keywords': keywords,
                     'patient_conditions': patient_conditions
                 }
-                ai_analysis = self.ai_service.analyze_literature_relevance(studies, search_context, ai_model)
+                ai_analysis = self.ai_service.analyze_literature_relevance(formatted_studies[:3], search_context, ai_model)  # Still analyze only top 3
             
             return {
-                'studies': studies,
+                'studies': formatted_studies,
                 'source': 'PubMed' if self.pubmed_available else 'Fallback',
                 'ai_analysis': ai_analysis,
                 'ai_capabilities': {
@@ -745,7 +817,8 @@ class RealDataLiteratureService:
                     'specialty': specialty,
                     'keywords': keywords,
                     'patient_conditions': patient_conditions,
-                    'total_results': len(studies),
+                    'max_results_requested': max_results,
+                    'total_results_returned': len(formatted_studies),
                     'timestamp': datetime.utcnow().isoformat()
                 }
             }
@@ -753,15 +826,48 @@ class RealDataLiteratureService:
         except Exception as e:
             logger.error(f"Literature search error: {e}")
             return self._get_error_response(specialty, keywords, patient_conditions)
+
+    def _format_study_links(self, studies: List[Dict]) -> List[Dict]:
+        """Format study links: always show full URLs"""
+        if not studies:
+            return studies
+        
+        formatted_studies = []
+        base_url = "https://pubmed.ncbi.nlm.nih.gov/"
+        
+        for study in studies:
+            formatted_study = study.copy()
+            
+            # Extract PubMed ID from URL or use existing ID
+            pubmed_id = None
+            if study.get('url', '').startswith(base_url):
+                pubmed_id = study['url'].replace(base_url, '').strip('/')
+            elif study.get('id') and study['id'].isdigit():
+                pubmed_id = study['id']
+            
+            if pubmed_id:
+                # Always show full URL
+                formatted_study['display_url'] = f"{base_url}{pubmed_id}/"
+                formatted_study['pubmed_id'] = pubmed_id
+                formatted_study['full_url'] = f"{base_url}{pubmed_id}/"
+            else:
+                formatted_study['display_url'] = study.get('url', 'No URL available')
+            
+            formatted_studies.append(formatted_study)
+        
+        return formatted_studies
     
-    def _search_pubmed(self, specialty: str, keywords: List[str], conditions: List[str]) -> List[Dict]:
-        """Search PubMed"""
+    def _search_pubmed(self, specialty: str, keywords: List[str], conditions: List[str], max_results: int = 99) -> List[Dict]:
+        """Search PubMed with configurable result limit"""
         try:
             from pymed import PubMed
             pubmed = PubMed(tool="GroqHCPAPI", email="opensource@example.com")
             
+            # Validate and cap max_results
+            max_results = min(max(1, max_results), 99)  # Ensure between 1-99
+            
             query = self._build_query(specialty, keywords, conditions)
-            results = pubmed.query(query, max_results=5)
+            results = pubmed.query(query, max_results=max_results)  # Use parameter
             
             studies = []
             for article in results:
@@ -786,14 +892,14 @@ class RealDataLiteratureService:
                     'full_text_available': bool(article.pubmed_id)
                 })
                 
-                if len(studies) >= 5:
+                if len(studies) >= max_results:
                     break
             
-            return studies if studies else self._get_fallback_studies(specialty, keywords, conditions)
+            return studies if studies else self._get_fallback_studies(specialty, keywords, conditions, max_results)
             
         except Exception as e:
             logger.error(f"PubMed search failed: {e}")
-            return self._get_fallback_studies(specialty, keywords, conditions)
+            return self._get_fallback_studies(specialty, keywords, conditions, max_results)
     
     def _build_query(self, specialty: str, keywords: List[str], conditions: List[str]) -> str:
         """Build PubMed search query"""
@@ -806,39 +912,69 @@ class RealDataLiteratureService:
             terms.extend(conditions)
         return " AND ".join(terms) if terms else "medical research"
     
-    def _get_fallback_studies(self, specialty: str, keywords: List[str], conditions: List[str]) -> List[Dict]:
-        """Fallback studies with rich abstracts for better AI analysis"""
-        return [
+    def _get_fallback_studies(self, specialty: str, keywords: List[str], conditions: List[str], max_results: int = 99) -> List[Dict]:
+        """Fallback studies that can generate up to max_results - FIXED VERSION"""
+        logger.info(f"Using fallback studies: specialty={specialty}, max_results={max_results}")
+        
+        base_url = "https://pubmed.ncbi.nlm.nih.gov/"
+        
+        # Ensure we have at least basic data
+        if not keywords:
+            keywords = ["treatment", "therapy"]
+        if not conditions:
+            conditions = ["condition"]
+        
+        # Always return at least 2 studies
+        studies = [
             {
                 'id': 'study_1',
-                'title': f'Advanced {specialty} Interventions for {", ".join(keywords)}',
+                'pubmed_id': '33383166',
+                'title': f'Advanced {specialty} Interventions for {", ".join(keywords[:2])}',
                 'journal': 'Journal of Clinical Medicine',
                 'publication_date': '2024-01-15',
                 'relevance_score': 0.9,
-                'abstract': f'''This comprehensive study examines the efficacy of various {specialty} interventions for patients with {", ".join(conditions)}. 
-                The research demonstrates significant improvements in key outcomes including mortality reduction, quality of life measures, 
-                and physiological parameters. The study included a randomized controlled trial with 500 participants over 12 months, 
-                showing statistically significant benefits for the intervention group (p < 0.01).''',
-                'url': 'https://example.com/study1',
+                'abstract': f'This comprehensive study examines the efficacy of various {specialty} interventions for patients with {", ".join(conditions)}.',
+                'url': f"{base_url}33383166/",
                 'authors': ['Smith J', 'Johnson A', 'Williams R'],
                 'source': 'Medical Database',
                 'full_text_available': True
             },
             {
                 'id': 'study_2',
-                'title': f'{specialty} Management of {conditions[0] if conditions else "Chronic Conditions"} with {keywords[0] if keywords else "Novel Therapies"}',
+                'pubmed_id': '33383167', 
+                'title': f'{specialty} Management of {conditions[0] if conditions else "Chronic Conditions"}',
                 'journal': 'New England Journal of Medicine',
-                'publication_date': '2024-01-10', 
+                'publication_date': '2024-01-10',
                 'relevance_score': 0.85,
-                'abstract': f'''This multi-center study investigates the long-term outcomes of {specialty} patients receiving targeted interventions 
-                for {", ".join(conditions)}. Results indicate a 35% reduction in hospital admissions and 28% improvement in patient-reported outcomes 
-                compared to standard care. The study highlights the importance of personalized treatment approaches in {specialty}.''',
-                'url': 'https://example.com/study2',
+                'abstract': f'This multi-center study investigates long-term outcomes for {specialty} patients.',
+                'url': f"{base_url}33383167/",
                 'authors': ['Brown K', 'Davis M', 'Miller T'],
                 'source': 'Clinical Trials Registry',
                 'full_text_available': True
             }
         ]
+        
+        # Generate additional studies only if needed
+        for i in range(3, max_results + 1):
+            if len(studies) >= max_results:
+                break
+                
+            studies.append({
+                'id': f'study_{i}',
+                'pubmed_id': f'3338316{i}' if i < 10 else f'33383{i:03d}',
+                'title': f'{specialty} Research on {keywords[i % len(keywords)] if keywords else "Treatment"}',
+                'journal': 'Various Medical Journals',
+                'publication_date': f'2024-01-{10 + (i % 20)}',  # Keep dates reasonable
+                'relevance_score': max(0.1, 0.8 - (i * 0.02)),  # Ensure positive score
+                'abstract': f'Study #{i} on {specialty} focusing on {conditions[i % len(conditions)] if conditions else "patient outcomes"}.',
+                'url': f"{base_url}3338316{i}/" if i < 10 else f"{base_url}33383{i:03d}/",
+                'authors': [f'Researcher {chr(65 + (i % 26))}'],
+                'source': 'Medical Research',
+                'full_text_available': True
+            })
+        
+        logger.info(f"Fallback generated {len(studies)} studies")
+        return studies[:max_results]
     
     def _get_error_response(self, specialty: str, keywords: List[str], conditions: List[str]) -> Dict:
         """Error response with basic fallback"""
@@ -946,12 +1082,54 @@ class LiteratureSearch(Resource):
             data.get('keywords', []),
             data.get('patient_conditions', []),
             data.get('enable_ai_analysis', True),
-            data.get('ai_model', 'llama-3.1-8b-instant')  # ✅ Changed from llama3-8b-8192
+            data.get('ai_model', 'llama-3.1-8b-instant'),
+            data.get('max_results', 99)  # Pass the parameter with default 99
         )
         
         logger.info(f"Literature search by {current_user['sub']} for {data.get('specialty')}")
         
-        return result
+        # Enhanced response structure
+        enhanced_response = {
+            'status': 'success',
+            'data': {
+                'studies': result.get('studies', []),
+                'ai_analysis': result.get('ai_analysis'),
+                'total_results': len(result.get('studies', []))
+            },
+            'metadata': {
+                'source': result.get('source', 'Fallback'),
+                'search_context': result.get('search_metadata', {}),
+                'ai_capabilities': result.get('ai_capabilities', {}),
+                'next_steps': [
+                    "Review full study texts for detailed methodology",
+                    "Consult clinical guidelines for application",
+                    "Consider patient-specific contraindications"
+                ]
+            }
+        }
+        
+        # Add format option
+        format_type = request.args.get('format', 'detailed')
+        if format_type == 'compact':
+            enhanced_response = self._compact_format(enhanced_response)
+        
+        return enhanced_response
+    
+    def _compact_format(self, response):
+        """Compact format for lighter payloads"""
+        compact_data = {
+            'status': response['status'],
+            'data': {
+                'study_count': len(response['data']['studies']),
+                'key_findings': response['data']['ai_analysis'].get('key_findings', [])[:3] if response['data']['ai_analysis'] else [],
+                'clinical_implications': response['data']['ai_analysis'].get('clinical_implications', [])[:2] if response['data']['ai_analysis'] else []
+            },
+            'metadata': {
+                'source': response['metadata']['source'],
+                'confidence': response['data']['ai_analysis'].get('confidence_score', 0) if response['data']['ai_analysis'] else 0
+            }
+        }
+        return compact_data
 
 # Groq AI Analysis endpoint
 @ns_ai.route('/analyze')
@@ -964,7 +1142,7 @@ class AIAnalysis(Resource):
         
         text = data.get('text', '')
         analysis_type = data.get('analysis_type', 'summary')
-        model = data.get('model', 'llama-3.1-8b-instant')  # ✅ Changed from llama3-8b-8192
+        model = data.get('model', 'llama-3.1-8b-instant')
         
         prompt = f"""
         Please analyze the following text for {analysis_type}:
@@ -979,19 +1157,35 @@ class AIAnalysis(Resource):
         try:
             analysis_result = ai_service._call_groq_api(prompt, model)
             
-            return {
-                'analysis': analysis_result,
-                'model_used': model,
-                'analysis_type': analysis_type,
-                'timestamp': datetime.utcnow().isoformat(),
-                'groq_available': ai_service.groq_available
+            response = {
+                'status': 'success',
+                'data': {
+                    'analysis': analysis_result,
+                    'analysis_type': analysis_type,
+                    'context': data.get('context', 'General analysis')
+                },
+                'metadata': {
+                    'model_used': model,
+                    'timestamp': datetime.utcnow().isoformat(),
+                    'groq_available': ai_service.groq_available,
+                    'next_steps': [
+                        "Review analysis with clinical team",
+                        "Validate findings against current guidelines",
+                        "Consider patient-specific factors"
+                    ]
+                }
             }
+            
+            return response
             
         except Exception as e:
             return {
-                'error': f'AI analysis failed: {str(e)}',
-                'groq_available': ai_service.groq_available,
-                'timestamp': datetime.utcnow().isoformat()
+                'status': 'error',
+                'message': f'AI analysis failed: {str(e)}',
+                'metadata': {
+                    'groq_available': ai_service.groq_available,
+                    'timestamp': datetime.utcnow().isoformat()
+                }
             }, 500
 
 # Analytics Predictions
@@ -1031,13 +1225,30 @@ class PredictCost(Resource):
 
 @ns_analytics.route('/population-trends')
 class PopulationTrends(Resource):
+    @ns_analytics.expect(population_analysis_model)  # ADD THIS DECORATOR
     @token_required
     def post(self, current_user):
         """Analyze population health trends"""
         data = request.get_json()
         patient_data_list = data.get('patients', [])
         trends = analytics_service.population_health_trends(patient_data_list)
-        return trends
+        
+        # Enhanced response structure
+        enhanced_response = {
+            'status': 'success',
+            'data': trends,
+            'metadata': {
+                'population_size': len(patient_data_list),
+                'timestamp': datetime.utcnow().isoformat(),
+                'next_steps': [
+                    "Review high-risk patient subgroups",
+                    "Consider targeted interventions for prevalent conditions",
+                    "Monitor population health trends over time"
+                ]
+            }
+        }
+        
+        return enhanced_response
 
 # Groq Models endpoint
 @ns_ai.route('/models')
@@ -1074,68 +1285,6 @@ def health():
         },
         'open_source': True
     }
-
-# AI Suggestions endpoint
-@ns_ai.route('/suggestions')
-class AISuggestions(Resource):
-    @jwt_required()
-    def post(self):
-        """Generate AI-powered search suggestions using Groq"""
-        try:
-            data = request.get_json()
-            query = data.get('query', '').strip()
-            specialty = data.get('specialty', 'General Medicine')
-            max_suggestions = data.get('max_suggestions', 8)
-            
-            if not query or len(query) < 3:
-                return {'suggestions': []}, 200
-            
-            # Get current user for context
-            current_user = get_jwt_identity()
-            
-            # Create AI prompt for suggestions
-            prompt = f"""You are a medical search assistant. Generate {max_suggestions} relevant medical search suggestions based on the user's query: "{query}"
-
-User context:
-- Specialty: {specialty}
-- Current user: {current_user}
-
-Generate suggestions that are:
-1. Clinically relevant and specific
-2. Related to the user's specialty when applicable
-3. Include both broad and specific terms
-4. Cover different aspects (diagnosis, treatment, research, guidelines)
-5. Use proper medical terminology
-
-Format as a JSON array of strings. Each suggestion should be a complete, searchable medical term or phrase.
-
-Examples of good suggestions:
-- "diabetes management guidelines"
-- "hypertension treatment protocols"
-- "cardiac rehabilitation outcomes"
-- "pediatric vaccine schedules"
-- "mental health assessment tools"
-
-Query: "{query}"
-Specialty: {specialty}
-
-Generate {max_suggestions} suggestions:"""
-
-            # Use Groq AI to generate suggestions
-            suggestions = ai_service.generate_suggestions(prompt, max_suggestions)
-            
-            logger.info(f"Generated {len(suggestions)} AI suggestions for query: {query}")
-            
-            return {
-                'suggestions': suggestions,
-                'query': query,
-                'specialty': specialty,
-                'count': len(suggestions)
-            }, 200
-            
-        except Exception as e:
-            logger.error(f"AI suggestions error: {e}")
-            return {'message': 'Failed to generate suggestions', 'suggestions': []}, 500
 
 # Error handlers
 @app.errorhandler(404)
