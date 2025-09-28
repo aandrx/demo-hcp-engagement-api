@@ -285,7 +285,9 @@ export default function DashboardPage() {
       if (riskResponse.ok) {
         const riskData = await riskResponse.json();
         console.log('Risk Assessment API Response:', riskData);
-        setRiskAssessment(riskData);
+        // Extract the actual data from the response structure
+        const assessmentData = riskData.data || riskData;
+        setRiskAssessment(assessmentData);
       } else {
         console.error('Risk Assessment API Error:', await riskResponse.text());
       }
@@ -310,7 +312,9 @@ export default function DashboardPage() {
       if (costResponse.ok) {
         const costData = await costResponse.json();
         console.log('Cost Analysis API Response:', costData);
-        setCostAnalysis(costData);
+        // Extract the actual data from the response structure
+        const analysisData = costData.data || costData;
+        setCostAnalysis(analysisData);
       } else {
         console.error('Cost Analysis API Error:', await costResponse.text());
       }
@@ -335,7 +339,9 @@ export default function DashboardPage() {
       if (populationResponse.ok) {
         const populationData = await populationResponse.json();
         console.log('Population Analysis API Response:', populationData);
-        setPopulationAnalysis(populationData);
+        // Extract the actual data from the response structure
+        const analysisData = populationData.data || populationData;
+        setPopulationAnalysis(analysisData);
       } else {
         console.error('Population Analysis API Error:', await populationResponse.text());
       }
