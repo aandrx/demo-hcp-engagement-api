@@ -3,6 +3,7 @@
 A comprehensive healthcare professional engagement platform with AI-powered medical literature search, risk assessment, and analytics capabilities.
 
 ![top screenshot](docs/dashboard-top.png)
+----
 ![bottom screenshot](docs/dashboard-bottom.png)
 
 ## Features
